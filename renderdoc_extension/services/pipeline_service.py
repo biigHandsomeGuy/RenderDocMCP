@@ -39,6 +39,7 @@ class PipelineService:
                 "resource_id": str(shader),
                 "entry_point": entry,
                 "stage": stage,
+                "source": self._get_shader_source(reflection),
             }
 
             # Get disassembly
@@ -66,6 +67,38 @@ class PipelineService:
         if result["error"]:
             raise ValueError(result["error"])
         return result["shader"]
+
+    @staticmethod
+    def _get_shader_source(reflection):
+        """Read embedded source files, without treating disassembly as source."""
+        source = {"available": False, "encoding": None, "files": []}
+        if reflection is None:
+            source["reason"] = "Shader reflection is unavailable."
+            return source
+
+        debug_info = getattr(reflection, "debugInfo", None)
+        if debug_info is None:
+            source["reason"] = "Shader debug information is unavailable."
+            return source
+
+        encoding = getattr(debug_info, "encoding", None)
+        if encoding is not None:
+            source["encoding"] = str(encoding)
+
+        for source_file in getattr(debug_info, "files", []) or []:
+            source["files"].append({
+                "filename": source_file.filename,
+                "contents": source_file.contents,
+            })
+
+        source["available"] = any(f["contents"] for f in source["files"])
+        if not source["available"]:
+            source["reason"] = (
+                "No embedded shader source contents are available. "
+                "Capture a shader with source/debug information retained; "
+                "disassembly cannot restore the original source."
+            )
+        return source
 
     def get_pipeline_state(self, event_id):
         """Get full pipeline state at an event"""

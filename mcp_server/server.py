@@ -191,7 +191,11 @@ def get_shader_info(
         event_id: The event ID to inspect the shader at
         stage: The shader stage (vertex, hull, domain, geometry, pixel, compute)
 
-    Returns shader disassembly, constant buffer values, and resource bindings.
+    Returns embedded shader source files when available, shader disassembly,
+    constant buffer values, and resource bindings. The source field includes
+    available, encoding, and files (filename/contents). If source is absent,
+    source.available is False and source.reason explains why; disassembly is
+    not a reconstruction of the original source.
     """
     return bridge.call("get_shader_info", {"event_id": event_id, "stage": stage})
 
