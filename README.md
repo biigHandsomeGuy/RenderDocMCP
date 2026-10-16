@@ -1,54 +1,105 @@
-# RenderDoc MCP Server
+﻿# RenderDoc MCP Server
 
-RenderDoc UI拡張機能として動作するMCPサーバー。AIアシスタントがRenderDocのキャプチャデータにアクセスし、グラフィックスデバッグを支援する。
+Expose RenderDoc capture data to AI assistants through the Model Context Protocol (MCP). Inspect draw calls, shaders, resource bindings, pipeline state, and GPU timings from an MCP-compatible client.
 
-## アーキテクチャ
+The project consists of a standalone Python MCP server and a RenderDoc UI extension. Capture loading and replay queries run inside RenderDoc, so RenderDoc must be running with the extension enabled.
 
-```
-Claude/AI Client (stdio)
-        │
-        ▼
-MCP Server Process (Python + FastMCP 2.0)
-        │ File-based IPC (%TEMP%/renderdoc_mcp/)
-        ▼
-RenderDoc Process (Extension)
-```
+## Features
 
-RenderDoc内蔵のPythonにはsocketモジュールがないため、ファイルベースのIPCで通信を行う。
+- List and open `.rdc` captures and check capture status.
+- Inspect the action tree with marker, event ID, and action flag filters.
+- Retrieve frame summaries, event details, and GPU timings.
+- Find draws and dispatches by shader name, texture name, or resource ID.
+- Read embedded shader source when available, alongside disassembly, constant buffer values, and resource bindings.
+- Inspect full pipeline state and texture metadata.
+- Read raw buffer and texture data as Base64-encoded bytes.
 
-## セットアップ
+## Architecture
 
-### 1. RenderDoc拡張機能のインストール
-
-```bash
-python scripts/install_extension.py
-```
-
-拡張機能は `%APPDATA%\qrenderdoc\extensions\renderdoc_mcp_bridge` にインストールされる。
-
-### 2. RenderDocで拡張機能を有効化
-
-1. RenderDocを起動
-2. Tools > Manage Extensions
-3. "RenderDoc MCP Bridge" を有効化
-
-### 3. MCPサーバーのインストール
-
-```bash
-uv tool install
-uv tool update-shell  # PATHに追加
+```text
+AI / MCP client
+       | stdio
+       v
+MCP server process (Python + FastMCP 2.x)
+       | File-based IPC in the system temporary directory
+       v
+RenderDoc extension (QTimer polling)
+       v
+RequestHandler -> RenderDocFacade -> Services
+       | Replay queries through Replay().BlockInvoke
+       v
+RenderDoc ReplayController
 ```
 
-シェルを再起動すると `renderdoc-mcp` コマンドが使えるようになる。
+The bridge uses files rather than network sockets to accommodate RenderDoc's embedded Python environment:
 
-> **Note**: `--editable` を付けると、ソースコードの変更が即座に反映される（開発時に便利）。
-> 安定版としてインストールする場合は `uv tool install .` を使用。
+| File | Purpose |
+|------|---------|
+| `request.json` | Request from the MCP server |
+| `response.json` | Result or error from the extension |
+| `lock` | Indicates that the client is writing a request |
 
-### 4. MCPクライアントの設定
+The IPC directory is `renderdoc_mcp` under `tempfile.gettempdir()`, typically `%TEMP%\renderdoc_mcp` on Windows. The extension polls every 100 ms, the client checks for responses every 50 ms, and requests time out after 30 seconds.
 
-#### Claude Desktop
+> `socket_server.py` is a legacy filename: the implementation uses file polling. `RENDERDOC_MCP_HOST` and `RENDERDOC_MCP_PORT` are retained for compatibility and do not control the current IPC transport.
 
-`claude_desktop_config.json` に追加:
+## Requirements
+
+- Python 3.10 or later for the external MCP server.
+- RenderDoc 1.20 or later, as declared by the extension manifest. This does not mean every subsequent version has been tested.
+- `uv` for the installation and development commands below.
+- An MCP client that supports stdio servers.
+- A RenderDoc embedded Python environment providing `renderdoc`, `qrenderdoc`, and `PySide2.QtCore`.
+
+The external server depends on `fastmcp>=2.0.0,<3.0.0` and `pydantic>=2.0.0`. The package manager installs these dependencies.
+
+> The original project documented testing on Windows with DirectX 11. Compatibility with other operating systems and graphics APIs has not been verified here.
+
+## Installation and Setup
+
+Clone the repository from https://github.com/biigHandsomeGuy/RenderDocMCP.
+
+### 1. Setup the environment
+We need the python and [Node.js](https://nodejs.org/).
+```powershell
+python -m pip install uv
+```
+### 2. Install the RenderDoc extension
+
+```powershell
+python "scripts\install_extension.py"
+```
+
+On Windows, the installer copies the extension to `%APPDATA%\qrenderdoc\extensions\renderdoc_mcp_bridge`. It replaces an existing installation and excludes Python cache files.
+
+### 3. Enable the extension
+
+1. Start or restart RenderDoc.
+2. Open **Tools > Manage Extensions**.
+3. Enable **RenderDoc MCP Bridge**.
+
+
+### 4. Install the MCP server
+
+```powershell
+cd RenderDocMCP
+uv tool install .
+uv tool update-shell
+```
+
+Reopen your terminal to make `renderdoc-mcp` available on `PATH`. This command starts a stdio MCP server; it is normally launched by your MCP client, not used as an interactive command-line application.
+
+For development, use an editable installation so source changes take effect after restarting the server:
+
+```powershell
+uv tool install --editable "RenderDocMCP"
+```
+
+> The Python package includes only `mcp_server`; it does not install the RenderDoc extension. After changing extension code, rerun the extension installer and reload the extension.
+
+### 5. Configure your MCP client
+
+The repository's `RenderDocMCP\.mcp.json` contains this configuration. Add the same server definition to your client's MCP settings if needed:
 
 ```json
 {
@@ -60,93 +111,74 @@ uv tool update-shell  # PATHに追加
 }
 ```
 
-#### Claude Code
+If the client cannot find the command, ensure its process can access the updated `PATH`, or replace `command` with the absolute path to the installed executable.
 
-`.mcp.json` に追加:
+### 6. Verify the connection
 
-```json
-{
-  "mcpServers": {
-    "renderdoc": {
-      "command": "renderdoc-mcp"
-    }
-  }
-}
+With RenderDoc running, the extension enabled, and your MCP client connected, call `get_capture_status`. A response of `{"loaded": false}` is normal when no capture is open. Then open a capture in RenderDoc or call `open_capture`.
+
+## Available MCP Tools
+
+The server provides 15 tools:
+
+| Tool | Description |
+|------|-------------|
+| `get_capture_status` | Check capture loading status, filename, and graphics API |
+| `list_captures` | List `.rdc` files in a directory without searching subdirectories |
+| `open_capture` | Open a capture, replacing the currently loaded capture |
+| `get_draw_calls` | Retrieve the action tree with marker, event range, and flag filters |
+| `get_frame_summary` | Get action statistics, top-level markers, and resource counts |
+| `get_draw_call_details` | Inspect draw parameters, output resources, and other event details |
+| `get_action_timings` | Get GPU timings for all or selected events, with optional marker filters |
+| `find_draws_by_shader` | Find draws and dispatches by partial shader name or entry point |
+| `find_draws_by_texture` | Find SRV, UAV, and render target bindings by partial resource name |
+| `find_draws_by_resource` | Match a resource ID in shader, SRV, UAV, render target, and depth target bindings |
+| `get_shader_info` | Retrieve embedded source when available, disassembly, constant buffers, and resource bindings |
+| `get_buffer_contents` | Read Base64-encoded buffer bytes with optional offset and length |
+| `get_texture_info` | Inspect dimensions, format, mip levels, array size, and MSAA metadata |
+| `get_texture_data` | Read texture data with mip, array slice, MSAA sample, and 3D depth slice selection |
+| `get_pipeline_state` | Inspect shaders, resources, samplers, constant buffers, and output state at an event |
+
+
+## Project Structure
+
+```text
+RenderDocMCP\
+|-- mcp_server\                  External MCP server
+|   |-- server.py                Tool registration and entry point
+|   |-- config.py                Compatibility settings
+|   `-- bridge\client.py         File-based IPC client
+|-- renderdoc_extension\         RenderDoc UI extension
+|   |-- __init__.py              Registration and menu integration
+|   |-- extension.json           Extension manifest
+|   |-- socket_server.py         File polling server
+|   |-- request_handler.py       Request routing and error responses
+|   |-- renderdoc_facade.py      Service facade and replay thread invocation
+|   |-- services\
+|   |   |-- capture_manager.py   Capture management
+|   |   |-- action_service.py    Actions, frame summaries, and GPU timings
+|   |   |-- search_service.py    Resource binding searches
+|   |   |-- resource_service.py  Texture and buffer data
+|   |   `-- pipeline_service.py  Pipeline state and shader information
+|   `-- utils\                  Parsing, serialization, and action tree helpers
+|-- scripts\install_extension.py
+|-- tests\test_shader_source.py  Shader source regression tests
+|-- pyproject.toml               Dependencies, build settings, and entry point
+|-- uv.lock                      Dependency lockfile
+`-- .mcp.json                    MCP client configuration
 ```
 
-## 使い方
 
-1. RenderDocを起動し、キャプチャファイル (.rdc) を開く
-2. MCPクライアント (Claude等) から RenderDoc のデータにアクセス
+## Limitations and Troubleshooting
 
-## MCPツール一覧
+- **Connection failures or timeouts:** Ensure RenderDoc is running, the extension is enabled, and both processes can access the same system temporary directory. Changing port settings does not resolve file-based IPC issues.
+- **No capture loaded:** Most analysis tools require an open `.rdc` capture. Capture status and directory listing do not.
+- **Avoid concurrent calls:** IPC shares one set of request and response files without reliable multi-client or multi-instance isolation. Use one server/extension pair and make calls sequentially.
+- **Large capture searches can be slow:** Binding searches visit individual draw or dispatch events and inspect pipeline state, which can exceed the 30-second timeout.
+- **Queries can change the replay event:** Search, shader, and pipeline queries switch the replay event without automatically restoring the previous event.
+- **Response sizes are not uniformly capped:** Full action trees, textures, and buffers can produce large responses. Prefer filters and partial reads.
+- **Use only in a trusted local environment:** The extension can list directories and open capture files. The IPC layer does not provide authentication.
 
-| ツール | 説明 |
-|--------|------|
-| `get_capture_status` | キャプチャの読み込み状態を確認 |
-| `get_draw_calls` | ドローコール一覧を階層構造で取得 |
-| `get_draw_call_details` | 特定のドローコールの詳細情報を取得 |
-| `get_shader_info` | シェーダーのソースコード・定数バッファの値を取得 |
-| `get_buffer_contents` | バッファの内容を取得 (Base64) |
-| `get_texture_info` | テクスチャのメタデータを取得 |
-| `get_texture_data` | テクスチャのピクセルデータを取得 (Base64) |
-| `get_pipeline_state` | パイプライン状態を取得 |
+## License
 
-## 使用例
-
-### ドローコール一覧の取得
-
-```
-get_draw_calls(include_children=true)
-```
-
-### シェーダー情報の取得
-
-```
-get_shader_info(event_id=123, stage="pixel")
-```
-
-### パイプライン状態の取得
-
-```
-get_pipeline_state(event_id=123)
-```
-
-### テクスチャデータの取得
-
-```
-# 2Dテクスチャのmip 0を取得
-get_texture_data(resource_id="ResourceId::123")
-
-# 特定のmipレベルを取得
-get_texture_data(resource_id="ResourceId::123", mip=2)
-
-# キューブマップの特定の面を取得 (0=X+, 1=X-, 2=Y+, 3=Y-, 4=Z+, 5=Z-)
-get_texture_data(resource_id="ResourceId::456", slice=3)
-
-# 3Dテクスチャの特定の深度スライスを取得
-get_texture_data(resource_id="ResourceId::789", depth_slice=5)
-```
-
-### バッファデータの部分取得
-
-```
-# バッファ全体を取得
-get_buffer_contents(resource_id="ResourceId::123")
-
-# オフセット256から512バイト取得
-get_buffer_contents(resource_id="ResourceId::123", offset=256, length=512)
-```
-
-## 要件
-
-- Python 3.10+
-- [uv](https://docs.astral.sh/uv/)
-- RenderDoc 1.20+
-
-> **Note**: 動作確認はWindows + DirectX 11環境でのみ行っています。
-> Linux/macOS + Vulkan/OpenGL環境でも動作する可能性がありますが、未検証です。
-
-## ライセンス
-
-MIT
+This project is licensed under the MIT License.
