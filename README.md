@@ -60,6 +60,14 @@ The external server depends on `fastmcp>=2.0.0,<3.0.0` and `pydantic>=2.0.0`. Th
 
 Clone the repository from https://github.com/biigHandsomeGuy/RenderDocMCP.
 
+After cloning, enter the `RenderDocMCP` project directory:
+
+```powershell
+cd RenderDocMCP
+```
+
+Run all subsequent commands from this project root. Project file paths are relative to `RenderDocMCP`; no particular drive or checkout location is required.
+
 ### 1. Setup the environment
 We need the python and [Node.js](https://nodejs.org/).
 ```powershell
@@ -68,7 +76,7 @@ python -m pip install uv
 ### 2. Install the RenderDoc extension
 
 ```powershell
-python "scripts\install_extension.py"
+python ./scripts/install_extension.py
 ```
 
 On Windows, the installer copies the extension to `%APPDATA%\qrenderdoc\extensions\renderdoc_mcp_bridge`. It replaces an existing installation and excludes Python cache files.
@@ -83,7 +91,6 @@ On Windows, the installer copies the extension to `%APPDATA%\qrenderdoc\extensio
 ### 4. Install the MCP server
 
 ```powershell
-cd RenderDocMCP
 uv tool install .
 uv tool update-shell
 ```
