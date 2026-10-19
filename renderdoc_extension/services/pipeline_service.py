@@ -5,6 +5,7 @@ Pipeline state service for RenderDoc.
 import renderdoc as rd
 
 from ..utils import Parsers, Serializers, Helpers
+from .fixed_function import get_fixed_function_state
 
 
 class PipelineService:
@@ -179,6 +180,7 @@ class PipelineService:
             except Exception as exc:
                 pipeline_info["input_assembly_error"] = str(exc)
 
+            pipeline_info.update(get_fixed_function_state(controller, pipe, api))
             result["pipeline"] = pipeline_info
 
         self._invoke(callback)

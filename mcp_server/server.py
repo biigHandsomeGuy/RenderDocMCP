@@ -282,6 +282,9 @@ def get_pipeline_state(event_id: int) -> dict:
     - Constant buffers: slot, size, variable count
     - Render targets and depth target
     - Viewports and input assembly state
+    - Blend, depth, stencil, rasterizer, scissor and multisample state
+    - Unavailable/API-inapplicable fixed-function values are null, not false
+    - Non-Vulkan sample counts describe bound attachments (source is reported)
     """
     return bridge.call("get_pipeline_state", {"event_id": event_id})
 

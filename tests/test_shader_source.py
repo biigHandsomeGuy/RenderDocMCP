@@ -181,6 +181,9 @@ class ShaderSourceTests(unittest.TestCase):
         self.assertEqual(result["render_targets"], [{"index": 0, "resource_id": "123"}])
         self.assertEqual(result["depth_target"], "456")
         self.assertEqual(result["input_assembly"]["topology"], "TriangleList")
+        for key in ("blend_state", "depth_state", "stencil_state", "rasterizer_state",
+                    "scissors", "multisample_state"):
+            self.assertIn(key, result)
         json.dumps(result)
 
 
