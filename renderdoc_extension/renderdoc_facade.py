@@ -4,6 +4,7 @@ Provides thread-safe access to RenderDoc's ReplayController and CaptureContext.
 Uses BlockInvoke to marshal calls to the replay thread.
 """
 
+from .services.texture_export_service import TextureExportService
 from .services import (
     CaptureManager,
     ActionService,
@@ -40,6 +41,7 @@ class RenderDocFacade:
         self._search = SearchService(ctx, self._invoke)
         self._resource = ResourceService(ctx, self._invoke)
         self._pipeline = PipelineService(ctx, self._invoke)
+        self._texture_export = TextureExportService(ctx, self._invoke)
 
     def _invoke(self, callback):
         """Invoke callback on replay thread via BlockInvoke"""
@@ -127,6 +129,15 @@ class RenderDocFacade:
         return self._resource.get_texture_data(resource_id, mip, slice, sample, depth_slice)
 
     # ==================== Pipeline Operations ====================
+
+    def export_texture(self, **params):
+        return self._texture_export.export_texture(**params)
+
+    def preview_texture(self, **params):
+        return self._texture_export.preview_texture(**params)
+
+    def export_event_output(self, **params):
+        return self._texture_export.export_event_output(**params)
 
     def get_shader_info(self, event_id, stage):
         """Get shader information for a specific stage"""

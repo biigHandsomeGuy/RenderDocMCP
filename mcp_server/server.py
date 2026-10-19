@@ -3,9 +3,11 @@ RenderDoc MCP Server
 FastMCP 2.0 server providing access to RenderDoc capture data.
 """
 
+import base64
 from typing import Literal
 
 from fastmcp import FastMCP
+from fastmcp.utilities.types import Image
 
 from .bridge.client import RenderDocBridge, RenderDocBridgeError
 from .config import settings
@@ -313,6 +315,63 @@ def open_capture(capture_path: str) -> dict:
     Note: This will close any currently open capture.
     """
     return bridge.call("open_capture", {"capture_path": capture_path})
+
+
+@mcp.tool
+def export_texture(
+    resource_id: str, output_path: str, event_id: int | None = None,
+    format: Literal["png", "jpg", "hdr", "dds"] = "png", mip: int = 0,
+    slice: int = 0, sample: int = 0, overwrite: bool = False,
+    channel: int = -1, black_point: float = 0.0, white_point: float = 1.0,
+) -> dict:
+    """Export a texture with RenderDoc's native encoder.
+
+    output_path must be absolute, match format, and have an existing parent.
+    Existing files are refused unless overwrite=True. event_id defaults to the
+    UI current event; replay returns to that event afterwards. slice selects an
+    array/cube face or 3D depth slice at mip. sample selects one MSAA sample.
+    channel=-1 saves RGBA; 0..3 extracts a grayscale channel. black_point and
+    white_point map values for 8-bit output. Returns file metadata, not pixels.
+    """
+    return bridge.call("export_texture", locals())
+
+
+@mcp.tool
+def preview_texture(
+    resource_id: str, event_id: int | None = None, mip: int = 0, slice: int = 0,
+    sample: int = 0, max_dimension: int = 1024, channel: int = -1,
+    black_point: float = 0.0, white_point: float = 1.0,
+) -> Image:
+    """Return a PNG as MCP image content for visual inspection.
+
+    Automatically selects an existing mip at or below the requested resolution,
+    starting at mip. No arbitrary resizing: fails if no mip fits max_dimension
+    (1..4096). PNG payload is limited to 4 MiB. Temporary files are removed.
+    Subresource/channel/range options match export_texture. Client image support
+    is required. The UI current replay event is restored after the operation.
+    """
+    result = bridge.call("preview_texture", locals())
+    data = base64.b64decode(result["content_base64"], validate=True)
+    if len(data) > 4 * 1024 * 1024:
+        raise ValueError("Preview exceeds 4 MiB")
+    return Image(data=data, format="png")
+
+
+@mcp.tool
+def export_event_output(
+    event_id: int, output_path: str, target_index: int = 0,
+    format: Literal["png", "jpg", "hdr", "dds"] = "png", mip: int = 0,
+    slice: int = 0, sample: int = 0, overwrite: bool = False,
+    channel: int = -1, black_point: float = 0.0, white_point: float = 1.0,
+) -> dict:
+    """Export a bound color output texture after replaying event_id.
+
+    target_index is the zero-based color attachment slot, not a depth target.
+    Unbound slots fail clearly. mip/slice select the texture's absolute
+    subresource, not an offset relative to its bound view. Other options match
+    export_texture. Restores the UI current event even if saving fails.
+    """
+    return bridge.call("export_event_output", locals())
 
 
 def main():

@@ -28,6 +28,9 @@ class RequestHandler:
             "get_pipeline_state": self._handle_get_pipeline_state,
             "list_captures": self._handle_list_captures,
             "open_capture": self._handle_open_capture,
+            "export_texture": self._handle_export_texture,
+            "preview_texture": self._handle_preview_texture,
+            "export_event_output": self._handle_export_event_output,
         }
 
     def handle(self, request):
@@ -58,6 +61,33 @@ class RequestHandler:
     def _handle_ping(self, params):
         """Handle ping request"""
         return {"status": "ok", "message": "pong"}
+
+    def _export_params(self, params, required, allowed):
+        for name in required:
+            if params.get(name) is None:
+                raise ValueError("%s is required" % name)
+        unknown = set(params) - set(allowed)
+        if unknown:
+            raise ValueError("Unknown export parameters: %s" % ", ".join(sorted(unknown)))
+        return params
+
+    def _handle_export_texture(self, params):
+        allowed = ("resource_id", "output_path", "event_id", "format", "mip", "slice",
+                   "sample", "overwrite", "channel", "black_point", "white_point")
+        return self.facade.export_texture(**self._export_params(
+            params, ("resource_id", "output_path"), allowed))
+
+    def _handle_preview_texture(self, params):
+        allowed = ("resource_id", "event_id", "mip", "slice", "sample",
+                   "max_dimension", "channel", "black_point", "white_point")
+        return self.facade.preview_texture(**self._export_params(
+            params, ("resource_id",), allowed))
+
+    def _handle_export_event_output(self, params):
+        allowed = ("event_id", "output_path", "target_index", "format", "mip", "slice",
+                   "sample", "overwrite", "channel", "black_point", "white_point")
+        return self.facade.export_event_output(**self._export_params(
+            params, ("event_id", "output_path"), allowed))
 
     def _handle_get_capture_status(self, params):
         """Handle get_capture_status request"""
