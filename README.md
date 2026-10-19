@@ -42,6 +42,8 @@ The bridge uses files rather than network sockets to accommodate RenderDoc's emb
 
 The IPC directory is `renderdoc_mcp` under `tempfile.gettempdir()`, typically `%TEMP%\renderdoc_mcp` on Windows. The extension polls every 100 ms, the client checks for responses every 50 ms, and requests time out after 30 seconds.
 
+Responses are fully serialized before atomic publication, and the client checks request IDs before accepting results. Serialization failures return explicit errors instead of incomplete JSON. Calls within one MCP server process are serialized; independent server processes still share the same IPC files and are not isolated.
+
 > `socket_server.py` is a legacy filename: the implementation uses file polling. `RENDERDOC_MCP_HOST` and `RENDERDOC_MCP_PORT` are retained for compatibility and do not control the current IPC transport.
 
 ## Requirements
@@ -184,7 +186,9 @@ RenderDocMCP\
 
 - **Connection failures or timeouts:** Ensure RenderDoc is running, the extension is enabled, and both processes can access the same system temporary directory. Changing port settings does not resolve file-based IPC issues.
 - **No capture loaded:** Most analysis tools require an open `.rdc` capture. Capture status and directory listing do not.
-- **Avoid concurrent calls:** IPC shares one set of request and response files without reliable multi-client or multi-instance isolation. Use one server/extension pair and make calls sequentially.
+- **Avoid multiple server instances:** Calls within one MCP server process are serialized, but separate processes still share one set of IPC files. Use one server/extension pair; cross-process concurrent access is not supported.
+- **Shader constants:** Constant block reading supports modern descriptor bindings, legacy buffer bindings, and non-buffer-backed OpenGL uniforms. Values still depend on shader reflection and replay support; a read error is not evidence that a uniform is unset or the application rendered incorrectly.
+- **Partial pipeline information:** Viewport, output attachment, and input assembly failures are reported in their corresponding error fields. Missing data or a tool error does not prove a rendering defect, and the response does not expose every API-specific pipeline setting.
 - **Large capture searches can be slow:** Binding searches visit individual draw or dispatch events and inspect pipeline state, which can exceed the 30-second timeout.
 - **Queries can change the replay event:** Search, shader, and pipeline queries switch the replay event without automatically restoring the previous event.
 - **Response sizes are not uniformly capped:** Full action trees, textures, and buffers can produce large responses. Prefer filters and partial reads.

@@ -100,10 +100,28 @@ class MCPBridgeServer(QObject):
                     "error": {"code": -32603, "message": str(e)}
                 }
 
-            # Write response
-            with open(RESPONSE_FILE, "w", encoding="utf-8") as f:
-                json.dump(response, f)
+            self._publish_response(response)
 
         except Exception as e:
             print("[MCP Bridge] Error processing request: %s" % str(e))
             traceback.print_exc()
+
+    @staticmethod
+    def _publish_response(response):
+        """Publish only a complete JSON document, or a serializable error."""
+        try:
+            payload = json.dumps(response, ensure_ascii=True, allow_nan=False)
+        except (TypeError, ValueError, OverflowError) as exc:
+            payload = json.dumps({
+                "id": response.get("id"),
+                "error": {"code": -32603,
+                          "message": "Response serialization failed: %s" % exc},
+            })
+        fd, temporary = tempfile.mkstemp(prefix="response-", suffix=".tmp", dir=IPC_DIR)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                stream.write(payload)
+            os.replace(temporary, RESPONSE_FILE)
+        finally:
+            if os.path.exists(temporary):
+                os.remove(temporary)

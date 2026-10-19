@@ -136,6 +136,53 @@ class ShaderSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No pixel shader bound"):
             self.service.get_shader_info(100, "pixel")
 
+    def test_modern_constant_block_descriptor(self):
+        cb = SimpleNamespace(name="Material", byteSize=16, bufferBacked=True)
+        reflection = SimpleNamespace(constantBlocks=[cb], resourceId=123, entryPoint="main")
+        self.pipe.GetConstantBlock.return_value = SimpleNamespace(descriptor=SimpleNamespace(
+            resource=456, byteOffset=32, byteSize=16))
+        self.controller.GetCBufferVariableContents.return_value = []
+        result = self.service._get_cbuffer_info(self.controller, self.pipe, reflection, 5)
+        self.assertNotIn("error", result[0])
+        self.pipe.GetConstantBlock.assert_called_once_with(5, 0, 0)
+        self.controller.GetCBufferVariableContents.assert_called_once_with(
+            self.pipe.GetGraphicsPipelineObject.return_value, 123, 5, "main", 0, 456, 32, 16)
+
+    def test_opengl_uniforms_without_buffer_resource(self):
+        cb = SimpleNamespace(name="$Globals", byteSize=0, bufferBacked=False)
+        reflection = SimpleNamespace(constantBlocks=[cb], resourceId=123, entryPoint="main")
+        self.controller.GetCBufferVariableContents.return_value = []
+        result = self.service._get_cbuffer_info(self.controller, self.pipe, reflection, 5)
+        self.assertNotIn("error", result[0])
+        self.pipe.GetConstantBlock.assert_not_called()
+        self.controller.GetCBufferVariableContents.assert_called_once_with(
+            self.pipe.GetGraphicsPipelineObject.return_value, 123, 5, "main", 0, 0, 0, 0)
+
+    def test_legacy_constant_buffer_and_compute_pipeline(self):
+        pipe = SimpleNamespace(
+            GetConstantBuffer=lambda *args: SimpleNamespace(resourceId=456, byteOffset=0, byteSize=16),
+            GetComputePipelineObject=lambda: 789)
+        reflection = SimpleNamespace(resourceId=123, entryPoint="main", constantBlocks=[
+            SimpleNamespace(name="Data", byteSize=16, bufferBacked=True)])
+        self.controller.GetCBufferVariableContents.return_value = []
+        result = self.service._get_cbuffer_info(self.controller, pipe, reflection, 6)
+        self.assertNotIn("error", result[0])
+        self.assertEqual(self.controller.GetCBufferVariableContents.call_args.args[0], 789)
+
+    def test_pipeline_uses_public_viewport_output_and_topology_apis(self):
+        self.pipe.GetShader.return_value = 0
+        self.pipe.GetViewport.return_value = SimpleNamespace(
+            x=0, y=0, width=640, height=480, minDepth=0, maxDepth=1)
+        self.pipe.GetOutputTargets.return_value = [SimpleNamespace(resource=123)]
+        self.pipe.GetDepthTarget.return_value = SimpleNamespace(resource=456)
+        self.pipe.GetPrimitiveTopology.return_value = "TriangleList"
+        result = self.service.get_pipeline_state(361)
+        self.assertEqual(result["viewports"][0]["width"], 640)
+        self.assertEqual(result["render_targets"], [{"index": 0, "resource_id": "123"}])
+        self.assertEqual(result["depth_target"], "456")
+        self.assertEqual(result["input_assembly"]["topology"], "TriangleList")
+        json.dumps(result)
+
 
 if __name__ == "__main__":
     unittest.main()
