@@ -1,4 +1,4 @@
-﻿# RenderDoc MCP Server
+# RenderDoc MCP Server
 
 Expose RenderDoc capture data to AI assistants through the Model Context Protocol (MCP). Inspect draw calls, shaders, resource bindings, pipeline state, and GPU timings from an MCP-compatible client.
 
@@ -93,14 +93,14 @@ Reopen your terminal to make `renderdoc-mcp` available on `PATH`. This command s
 For development, use an editable installation so source changes take effect after restarting the server:
 
 ```powershell
-uv tool install --editable "RenderDocMCP"
+uv tool install --editable .
 ```
 
 > The Python package includes only `mcp_server`; it does not install the RenderDoc extension. After changing extension code, rerun the extension installer and reload the extension.
 
 ### 5. Configure your MCP client
 
-The repository's `RenderDocMCP\.mcp.json` contains this configuration. Add the same server definition to your client's MCP settings if needed:
+The repository's `.mcp.json` contains this configuration. Add the same server definition to your client's MCP settings if needed:
 
 ```json
 {
@@ -142,54 +142,6 @@ The server provides 18 tools:
 | `export_texture` | Save a texture subresource to PNG, JPG, HDR, or DDS and return file metadata |
 | `preview_texture` | Return a bounded PNG preview as MCP image content for visual inspection |
 | `export_event_output` | Save a bound color output texture at a specified event |
-
-## Image Export and Preview
-
-Export uses RenderDoc's native encoder, without an additional image library. These examples show MCP tool calls, not standalone Python scripts:
-
-```python
-export_texture(
-    resource_id="ResourceId::12345",
-    output_path="E:\\wangsc\\exports\\texture.png",
-    event_id=123,
-    format="png",
-    mip=0,
-    slice=0,
-    sample=0,
-)
-
-preview_texture(
-    resource_id="ResourceId::12345",
-    event_id=123,
-    max_dimension=1024,
-)
-
-export_event_output(
-    event_id=123,
-    target_index=0,
-    output_path="E:\\wangsc\\exports\\event_123.png",
-)
-```
-
-- **Paths and overwrites:** Use an absolute output path on the RenderDoc host and create its parent directory first. The extension must match `format` (`png`, `jpg`, `hdr`, or `dds`; JPG also accepts `.jpeg`). Files are not overwritten unless `overwrite=True`. Saving uses a temporary file; failed encoding does not replace an existing destination.
-- **Event selection:** If `event_id` is omitted, the texture is exported at the UI current event. All three tools return replay to the UI current event after the operation, including save failures. Existing inspection tools may have moved replay independently of the UI.
-- **Subresources:** `mip`, `slice`, and `sample` default to zero. `slice` selects an array slice, cube face (X+, X-, Y+, Y-, Z+, Z-), or 3D depth slice at the selected mip. Cube array sizes already count faces. MSAA exports select one sample; automatic resolve and exporting all mips/slices are not exposed by these tools.
-- **Color output selection:** `target_index` is a zero-based color attachment slot; depth outputs are not selected by this helper. An unbound or invalid slot produces an error. `mip` and `slice` are absolute texture subresources, not offsets relative to the bound view. Output textures represent their contents after the selected event, not an isolated contribution from that draw.
-- **Channels and range:** `channel=-1` exports RGBA; `channel=0..3` extracts one channel as grayscale. `black_point` and `white_point` default to `0.0` and `1.0` and control RenderDoc's mapping for 8-bit output. They must be finite and increasing. PNG/JPG do not preserve HDR precision; use an appropriate native format when precision matters. Export does not reproduce every Texture Viewer display setting.
-- **Preview limits:** Preview is PNG image content, not raw texture bytes. Starting at `mip`, it selects an existing lower-resolution mip that fits `max_dimension` (default 1024; allowed 1..4096). It does not resize arbitrarily: a texture without a sufficiently small mip produces an error. PNG payloads larger than 4 MiB are rejected. Temporary preview files are deleted. Actual image display depends on the MCP client.
-- **Return values:** File exports return the absolute path, byte size, texture ID, dimensions, event, format, and selected conversion parameters. Preview returns an MCP image content block rather than a file path.
-
-After upgrading, reinstall/reload the RenderDoc extension and update/restart the MCP server so the new tools are registered.
-
-## Tests
-
-Run the standard-library regression suite from your checkout using an absolute path:
-
-```powershell
-uv run --project "E:\wangsc\RenderDocMCP" python -m unittest discover -s "E:\wangsc\RenderDocMCP\tests" -v
-```
-
-Export service tests use mocked RenderDoc bindings and real temporary files. MCP integration tests exercise tool registration, argument forwarding, and image content serialization with the installed FastMCP dependency. Real GPU replay and format conversion still require validation inside RenderDoc with a compatible capture.
 
 ## Project Structure
 
