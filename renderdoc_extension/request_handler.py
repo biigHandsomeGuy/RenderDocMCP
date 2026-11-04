@@ -31,6 +31,7 @@ class RequestHandler:
             "export_texture": self._handle_export_texture,
             "preview_texture": self._handle_preview_texture,
             "export_event_output": self._handle_export_event_output,
+            "export_vs_output": self._handle_export_vs_output,
         }
 
     def handle(self, request):
@@ -76,6 +77,11 @@ class RequestHandler:
                    "sample", "overwrite", "channel", "black_point", "white_point")
         return self.facade.export_texture(**self._export_params(
             params, ("resource_id", "output_path"), allowed))
+
+    def _handle_export_vs_output(self, params):
+        allowed = ("event_id", "output_path", "instance", "view", "overwrite")
+        return self.facade.export_vs_output(**self._export_params(
+            params, ("event_id", "output_path"), allowed))
 
     def _handle_preview_texture(self, params):
         allowed = ("resource_id", "event_id", "mip", "slice", "sample",

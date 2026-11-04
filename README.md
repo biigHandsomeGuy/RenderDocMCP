@@ -129,7 +129,7 @@ With RenderDoc running, the extension enabled, and your MCP client connected, ca
 
 ## Available MCP Tools
 
-The server provides 18 tools:
+The server provides 19 tools:
 
 | Tool | Description |
 |------|-------------|
@@ -151,6 +151,22 @@ The server provides 18 tools:
 | `export_texture` | Save a texture subresource to PNG, JPG, HDR, or DDS and return file metadata |
 | `preview_texture` | Return a bounded PNG preview as MCP image content for visual inspection |
 | `export_event_output` | Save a bound color output texture at a specified event |
+
+| `export_vs_output` | Export all vertex shader output attributes for one draw instance/view to CSV |
+
+### Export vertex shader outputs
+
+Call `export_vs_output(event_id=123, output_path="E:\\exports\\vs_output.csv", instance=0, view=0)`.
+The directory must already exist on the RenderDoc host. Existing files are refused unless
+`overwrite=True`. Reload the updated RenderDoc extension and restart the MCP server to expose this tool.
+
+The UTF-8 CSV contains `VTX` (draw-order row), `IDX` (post-VS buffer index), `RESTART`,
+and separate `.x/.y/.z/.w` columns for each output attribute. Indexed vertices can repeat;
+`IDX` is not the original input vertex ID. Primitive-restart rows have blank attributes.
+Position is exported as written by the vertex shader, without perspective division.
+`instance` and `view` are zero-based selections; instance does not include the draw's first-instance offset.
+Only VSOut is exported (not tessellation/geometry output). Post-VS data and shader reflection
+must be available. The tool returns file metadata and restores the UI replay event even on failure.
 
 ## Project Structure
 

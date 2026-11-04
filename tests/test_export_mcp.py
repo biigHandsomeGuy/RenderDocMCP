@@ -29,7 +29,9 @@ class ExportMCPTests(unittest.IsolatedAsyncioTestCase):
     async def test_registered_tools_and_schemas(self):
         async with Client(mcp) as client:
             tools = {tool.name: tool for tool in await client.list_tools()}
-            self.assertEqual(len(tools), 18)
+            self.assertEqual(len(tools), 19)
+            self.assertIn("event_id", tools["export_vs_output"].inputSchema["required"])
+            self.assertIn("output_path", tools["export_vs_output"].inputSchema["required"])
             self.assertIn("output_path", tools["export_texture"].inputSchema["required"])
             self.assertIn("resource_id", tools["preview_texture"].inputSchema["required"])
             self.assertIn("event_id", tools["export_event_output"].inputSchema["required"])
@@ -49,6 +51,16 @@ class ExportMCPTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(forwarded[key], value)
                     self.assertFalse(forwarded["overwrite"])
                     self.assertEqual(forwarded["format"], "png")
+
+    async def test_vs_output_forwards_parameters(self):
+        async with Client(mcp) as client:
+            with patch("mcp_server.server.bridge.call", return_value={"ok": True}) as bridge:
+                result = await client.call_tool("export_vs_output", {
+                    "event_id": 20, "output_path": "E:\\exports\\vs.csv", "instance": 2})
+                self.assertFalse(result.is_error)
+                bridge.assert_called_once_with("export_vs_output", {
+                    "event_id": 20, "output_path": "E:\\exports\\vs.csv",
+                    "instance": 2, "view": 0, "overwrite": False})
 
     async def test_preview_is_image_content(self):
         # Serialization is tested here; the native encoder is mocked separately.

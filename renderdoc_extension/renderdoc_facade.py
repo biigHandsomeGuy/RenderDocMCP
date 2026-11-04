@@ -5,6 +5,7 @@ Uses BlockInvoke to marshal calls to the replay thread.
 """
 
 from .services.texture_export_service import TextureExportService
+from .services.mesh_export_service import MeshExportService
 from .services import (
     CaptureManager,
     ActionService,
@@ -42,6 +43,7 @@ class RenderDocFacade:
         self._resource = ResourceService(ctx, self._invoke)
         self._pipeline = PipelineService(ctx, self._invoke)
         self._texture_export = TextureExportService(ctx, self._invoke)
+        self._mesh_export = MeshExportService(ctx, self._invoke)
 
     def _invoke(self, callback):
         """Invoke callback on replay thread via BlockInvoke"""
@@ -132,6 +134,9 @@ class RenderDocFacade:
 
     def export_texture(self, **params):
         return self._texture_export.export_texture(**params)
+
+    def export_vs_output(self, **params):
+        return self._mesh_export.export_vs_output(**params)
 
     def preview_texture(self, **params):
         return self._texture_export.preview_texture(**params)

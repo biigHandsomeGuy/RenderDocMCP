@@ -377,6 +377,26 @@ def export_event_output(
     return bridge.call("export_event_output", locals())
 
 
+@mcp.tool
+def export_vs_output(
+    event_id: int, output_path: str, instance: int = 0, view: int = 0,
+    overwrite: bool = False,
+) -> dict:
+    """Export all vertex shader output attributes to a UTF-8 CSV file.
+
+    event_id must be a draw call. instance and view are zero-based selections,
+    not instance IDs including the draw's firstInstance offset. output_path must
+    be absolute, end in .csv, and have an existing parent on the RenderDoc host.
+    Rows follow post-VS draw order (indexed vertices can repeat). VTX is the row
+    number; IDX addresses the post-VS buffer, not the original input vertex ID.
+    RESTART rows have blank attributes. Position remains in shader output space
+    (no perspective divide). Existing files require overwrite=True. Returns file
+    metadata, not all rows, and restores the UI current replay event on failure
+    or success. Requires post-VS data and vertex shader reflection.
+    """
+    return bridge.call("export_vs_output", locals())
+
+
 def main():
     """Run the MCP server"""
     mcp.run()
